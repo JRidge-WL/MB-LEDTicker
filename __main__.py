@@ -1,17 +1,20 @@
 from scripts import getTime # Import all custom scripts
 import time
 
-import platform
+import os
 
-try:
-    # Check if running on Raspberry Pi
-    if platform.system() == "Linux" and "arm" in platform.machine():
-        from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-        print("Running on Raspberry Pi: using real RGBMatrix library.")
-    else:
-        raise ImportError("Not on Pi")
-except ImportError:
-    # Fallback to emulator
+def is_raspberry_pi():
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            cpuinfo = f.read()
+        return "Raspberry Pi" in cpuinfo or "BCM" in cpuinfo
+    except FileNotFoundError:
+        return False
+    
+if is_raspberry_pi():
+    from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+    print("Running on Raspberry Pi: using real RGBMatrix library.")
+else:
     from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions, graphics
     print("Running on non-Pi system: using RGBMatrixEmulator.")
 
