@@ -1,24 +1,20 @@
-# input: timezone (e.g., "America/New_York")
-# outputs the current time in 24hr format for that timezone
-
-import pytz
+from zoneinfo import ZoneInfo
 from datetime import datetime
 
 def get_24hr_time(timezone_str):
-    print(f"DEBUG: Received timezone string: {repr(timezone_str)}")
     try:
-        timezone = pytz.timezone(timezone_str.strip())
-    except pytz.UnknownTimeZoneError:
+        tz = ZoneInfo(timezone_str)
+    except Exception:
         return f"Unknown timezone: {timezone_str}"
     
-    now = datetime.now(timezone)
+    now = datetime.now(tz)
     return now.strftime("%H:%M")
 
 def get_12hr_time(timezone_str):
     try:
-        timezone = pytz.timezone(timezone_str)
-    except pytz.UnknownTimeZoneError:
+        tz = ZoneInfo(timezone_str)
+    except Exception:
         return f"Unknown timezone: {timezone_str}"
     
-    now = datetime.now(timezone)
+    now = datetime.now(tz)
     return now.strftime("%I:%M %p")
