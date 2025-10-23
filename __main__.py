@@ -43,7 +43,7 @@ pos = canvas.width
 while True:
     canvas.Clear()
     # y=20 fits well within 32px height for 7x13 font
-    len_msg = graphics.DrawText(canvas, font, pos, 20, textColor, f"{message} | {getTime.get_24hr_time('America/Los_Angeles')}")
+    len_msg = graphics.DrawText(canvas, font, pos, 20, textColor, f"{message} | {getTime.get_24hr_time('America/New_York')}")
     pos -= 1
     if pos + len_msg < 0:
         pos = canvas.width
