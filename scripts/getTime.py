@@ -5,8 +5,9 @@ import pytz
 from datetime import datetime
 
 def get_24hr_time(timezone_str):
+    print(f"DEBUG: Received timezone string: {repr(timezone_str)}")
     try:
-        timezone = pytz.timezone(timezone_str)
+        timezone = pytz.timezone(timezone_str.strip())
     except pytz.UnknownTimeZoneError:
         return f"Unknown timezone: {timezone_str}"
     

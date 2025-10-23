@@ -34,7 +34,7 @@ font = graphics.Font()
 font.LoadFont("./fonts/7x13.bdf")  # Ensure this path is correct
 
 # Set text color
-textColor = graphics.Color(255, 0, 0)  # Red
+textColor = graphics.Color(255, 255, 255)
 
 # Text to scroll
 message = "Current time in Portland, USA!"
