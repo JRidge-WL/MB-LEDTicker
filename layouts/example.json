@@ -1,0 +1,79 @@
+{
+  "version": "1.0.0",
+  "resources": {
+    "logo": "https://example.com/assets/logo.png",
+    "background": "./assets/bg.jpg"
+  },
+  "objects": [
+    {
+      "type": "Image",
+      "x": "0px",
+      "y": "0px",
+      "width": "100%",
+      "height": "100%",
+      "path": "./assets/bg.jpg",
+      "horizontal": "left",
+      "vertical": "top"
+    },
+    {
+      "type": "Group",
+      "x": "0px",
+      "y": "0px",
+      "width": "100%",
+      "height": "32px",
+      "horizontal": "left",
+      "vertical": "top",
+      "objects": [
+        {
+          "type": "Textbox",
+          "x": "0px",
+          "y": "0px",
+          "width": "20%",
+          "height": "100%",
+          "text": "Breaking News:",
+          "font": "7x13.bdf",
+          "fgColor": "#FFFFFF",
+          "bgColor": "#FF0000",
+          "horizontal": "left",
+          "vertical": "centre"
+        },
+        {
+          "type": "ScrollingTextbox",
+          "x": "20%",
+          "y": "0px",
+          "width": "80%",
+          "height": "100%",
+          "text": "{api:news.headline}",
+          "font": "7x13.bdf",
+          "fgColor": "#FFFFFF",
+          "bgColor": "#000000",
+          "scrollSpeed": 3,
+          "horizontal": "left",
+          "vertical": "centre"
+        }
+      ]
+    },
+    {
+      "type": "Textbox",
+      "x": "50%",
+      "y": "100%",
+      "width": "50%",
+      "height": "20px",
+      "text": "Welcome, {var:username}!",
+      "font": "7x13.bdf",
+      "fgColor": "#00FF00",
+      "horizontal": "centre",
+      "vertical": "bottom"
+    },
+    {
+      "type": "Image",
+      "x": "90%",
+      "y": "90%",
+      "width": "64px",
+      "height": "32px",
+      "path": "https://example.com/assets/logo.png",
+      "horizontal": "right",
+      "vertical": "bottom"
+    }
+  ]
+}

@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LED Panel Layout",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
+      "description": "Schema version number (e.g., 1.0, 1.1, 2.0)"
+    },
+    "resources": {
+      "type": "object",
+      "description": "Named resources that must be file paths (local or URL)",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(https?:\\/\\/|\\.\\/|\\/|[A-Za-z]:\\\\).+",
+        "description": "Must be a valid file path or URL"
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/object" }
+    }
+  },
+  "required": ["version", "objects"],
+
+  "$defs": {
+    "dimension": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?(px|%)$",
+      "description": "Dimension or position, must end with % or px (e.g., '10%', '100px')"
+    },
+
+    "leafObject": {
+      "type": "object",
+      "required": ["type", "x", "y", "width", "height"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["Image", "Textbox", "ScrollingTextbox", "Alert"]
+        },
+        "x": { "$ref": "#/$defs/dimension" },
+        "y": { "$ref": "#/$defs/dimension" },
+        "width": { "$ref": "#/$defs/dimension" },
+        "height": { "$ref": "#/$defs/dimension" },
+
+        "horizontal": {
+          "type": "string",
+          "enum": ["left", "centre", "right"],
+          "description": "Horizontal origin for positioning"
+        },
+        "vertical": {
+          "type": "string",
+          "enum": ["top", "centre", "bottom"],
+          "description": "Vertical origin for positioning"
+        },
+
+        "path": {
+          "type": "string",
+          "pattern": "^(https?:\\/\\/|\\.\\/|\\/|[A-Za-z]:\\\\).+",
+          "description": "For Image objects: local path or URL"
+        },
+        "text": {
+          "type": "string",
+          "description": "Text content, may include inline tokens like {api:weather}"
+        },
+        "dataSource": {
+          "type": "string",
+          "description": "Internal API name (e.g., 'weather', 'stocks'). If set, overrides text at runtime."
+        },
+        "dataParams": {
+          "type": "object",
+          "description": "Parameters for the data source (e.g., {\"location\": \"London\"})"
+        },
+        "fgColor": {
+          "type": "string",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "description": "Foreground color in hex"
+        },
+        "bgColor": {
+          "type": "string",
+          "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+          "description": "Background color in hex"
+        },
+        "font": {
+          "type": "string",
+          "description": "Font to use (only for text-based objects)"
+        },
+        "scrollSpeed": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "For ScrollingTextbox only"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "Textbox" } } },
+          "then": {
+            "anyOf": [
+              { "required": ["text"] },
+              { "required": ["dataSource"] }
+            ],
+            "required": ["font"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "Alert" } } },
+          "then": { "required": ["text", "font"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "ScrollingTextbox" } } },
+          "then": { "required": ["scrollSpeed", "font"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "Image" } } },
+          "then": { "required": ["path"] }
+        }
+      ]
+    },
+
+    "groupObject": {
+      "type": "object",
+      "required": ["type", "x", "y", "width", "height", "objects"],
+      "properties": {
+        "type": { "const": "Group" },
+        "x": { "$ref": "#/$defs/dimension" },
+        "y": { "$ref": "#/$defs/dimension" },
+        "width": { "$ref": "#/$defs/dimension" },
+        "height": { "$ref": "#/$defs/dimension" },
+        "horizontal": {
+          "type": "string",
+          "enum": ["left", "centre", "right"]
+        },
+        "vertical": {
+          "type": "string",
+          "enum": ["top", "centre", "bottom"]
+        },
+        "objects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/object" }
+        }
+      }
+    },
+
+    "object": {
+      "oneOf": [
+        { "$ref": "#/$defs/leafObject" },
+        { "$ref": "#/$defs/groupObject" }
+      ]
+    }
+  }
+}
