@@ -129,12 +129,19 @@ def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, de
             if idx not in scroll_state:
                 scroll_state[idx] = w
             pos_local = scroll_state[idx]
-            text_len = graphics.DrawText(local, font, pos_local, y_baseline_local, color, text)
+            # draw directly on the real canvas, offset into the object's box
+            text_len = graphics.DrawText(canvas, font,
+                                        x0 + pos_local,
+                                        y0 + y_baseline_local,
+                                        color, text)
             scroll_state[idx] = pos_local - 1
             if pos_local + text_len < 0:
                 scroll_state[idx] = w
         else:
-            graphics.DrawText(local, font, 0, y_baseline_local, color, text)
+            graphics.DrawText(canvas, font,
+                  x0,
+                  y0 + y_baseline_local,
+                  color, text)
 
         if debug:
             dbg_color = DEBUG_COLOURS[idx % len(DEBUG_COLOURS)]
