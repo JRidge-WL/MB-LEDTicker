@@ -39,7 +39,8 @@
       "font": "5x7.bdf",
       "fgColor": "#FFFF00",
       "horizontal": "left",
-      "vertical": "top"
+      "vertical": "top",
+      "scrollSpeed": 2
     }
   ]
 }
