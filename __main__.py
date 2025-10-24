@@ -1,8 +1,8 @@
-from scripts import getTime, validateSchema # Import all custom scripts
-from scripts.draw import draw_layout
-import time
 import os
+import time
+from scripts import getTime, validateSchema  # your custom modules
 
+# --- Platform detection ---
 def is_raspberry_pi():
     try:
         with open("/proc/cpuinfo", "r") as f:
@@ -11,22 +11,43 @@ def is_raspberry_pi():
     except FileNotFoundError:
         return False
 
+if is_raspberry_pi():
+    from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
+    print("Running on Pi - Using RGBMatrix library.")
+else:
+    from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions, graphics
+    print("Running on non-Pi system: Emulating RGBMatrix library.")
+
+# --- Fonts directory ---
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+FONTS_DIR = os.path.join(PROJECT_ROOT, "fonts")
+
+# --- Debug colours ---
+DEBUG_COLOURS = [
+    graphics.Color(255, 0, 0), graphics.Color(0, 255, 0), graphics.Color(0, 0, 255),
+    graphics.Color(255, 255, 0), graphics.Color(255, 0, 255), graphics.Color(0, 255, 255),
+    graphics.Color(255, 128, 0), graphics.Color(128, 0, 255)
+]
+
+# --- ClippedCanvas helper ---
+class ClippedCanvas:
+    def __init__(self, real_canvas, offset_x, offset_y, width, height):
+        self._canvas = real_canvas
+        self.offset_x, self.offset_y = offset_x, offset_y
+        self.width, self.height = width, height
+
+    def SetPixel(self, x, y, r, g, b):
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self._canvas.SetPixel(self.offset_x + x, self.offset_y + y, r, g, b)
+
+    def Clear(self):
+        for lx in range(self.width):
+            for ly in range(self.height):
+                self._canvas.SetPixel(self.offset_x + lx, self.offset_y + ly, 0, 0, 0)
+
+# --- Layout unpacker ---
 def unpack_layout(layout: dict, panel_width: int, panel_height: int):
-    """
-    Unpack a validated layout into a flat list of drawable objects with pixel coordinates.
-
-    Args:
-        layout (dict): The validated layout object (from validateSchema).
-        panel_width (int): Width of the LED panel in pixels.
-        panel_height (int): Height of the LED panel in pixels.
-
-    Returns:
-        list[dict]: Flat list of objects (Textbox, ScrollingTextbox, Image, Alert)
-                    with resolved pixel positions and sizes.
-    """
-
     def parse_dimension(value: str, total: int) -> int:
-        """Convert '50%' or '32px' into an integer pixel value."""
         if value.endswith("%"):
             return int(float(value[:-1]) / 100 * total)
         elif value.endswith("px"):
@@ -35,105 +56,118 @@ def unpack_layout(layout: dict, panel_width: int, panel_height: int):
             raise ValueError(f"Invalid dimension: {value}")
 
     def apply_alignment(x, y, w, h, horiz, vert):
-        """Adjust x,y based on horizontal/vertical origin."""
         if horiz == "centre":
-            x = x - w // 2
+            x -= w // 2
         elif horiz == "right":
-            x = x - w
-        # left = default
-
+            x -= w
         if vert == "centre":
-            y = y - h // 2
+            y -= h // 2
         elif vert == "bottom":
-            y = y - h
-        # top = default
-
+            y -= h
         return x, y
 
     def recurse(objects, parent_w, parent_h, parent_x=0, parent_y=0):
         flat = []
         for obj in objects:
-            # Resolve dimensions relative to parent
             x = parse_dimension(obj["x"], parent_w)
             y = parse_dimension(obj["y"], parent_h)
             w = parse_dimension(obj["width"], parent_w)
             h = parse_dimension(obj["height"], parent_h)
 
-            # Position relative to parent
-            abs_x = parent_x + x
-            abs_y = parent_y + y
-
-            horiz = obj.get("horizontal", "left")
-            vert = obj.get("vertical", "top")
-
-            # Apply alignment
-            abs_x, abs_y = apply_alignment(abs_x, abs_y, w, h, horiz, vert)
+            abs_x, abs_y = parent_x + x, parent_y + y
+            abs_x, abs_y = apply_alignment(abs_x, abs_y, w, h,
+                                           obj.get("horizontal", "left"),
+                                           obj.get("vertical", "top"))
 
             if obj["type"] == "Group":
-                # Recurse into children, using this group's box as new parent
-                flat.extend(recurse(
-                    obj["objects"],
-                    parent_w=w,
-                    parent_h=h,
-                    parent_x=abs_x,
-                    parent_y=abs_y
-                ))
+                flat.extend(recurse(obj["objects"], w, h, abs_x, abs_y))
             else:
-                # Leaf object: add to flat list
                 flat.append({
-                    "type": obj["type"],
-                    "x": abs_x,
-                    "y": abs_y,
-                    "width": w,
-                    "height": h,
-                    "text": obj.get("text"),
-                    "path": obj.get("path"),
-                    "font": obj.get("font"),
-                    "fgColor": obj.get("fgColor"),
-                    "bgColor": obj.get("bgColor"),
-                    "scrollSpeed": obj.get("scrollSpeed"),
-                    "dataSource": obj.get("dataSource"),
-                    "dataParams": obj.get("dataParams")
+                    "type": obj["type"], "x": abs_x, "y": abs_y,
+                    "width": w, "height": h,
+                    "text": obj.get("text"), "path": obj.get("path"),
+                    "font": obj.get("font"), "fgColor": obj.get("fgColor"),
+                    "bgColor": obj.get("bgColor"), "scrollSpeed": obj.get("scrollSpeed"),
+                    "dataSource": obj.get("dataSource"), "dataParams": obj.get("dataParams")
                 })
         return flat
 
     return recurse(layout["objects"], panel_width, panel_height)
 
-if is_raspberry_pi():
-    from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-    print("Running on Pi - Using RGBMatrix library.")
-else:
-    from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions, graphics
-    print("Running on non-Pi system: Emulating RGBMatrix library.")
+# --- Drawing logic ---
+def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False):
+    if fonts_cache is None:
+        fonts_cache = {}
+    if scroll_state is None:
+        scroll_state = {}
 
-# Configuration for 8x1 panels of 64x32 each
+    canvas.Clear()
+
+    for idx, obj in enumerate(objects):
+        if obj["type"] not in ("Textbox", "ScrollingTextbox", "Alert"):
+            continue
+
+        font_name = obj.get("font", "7x13.bdf")
+        font_path = font_name if os.path.isabs(font_name) else os.path.join(FONTS_DIR, font_name)
+
+        if font_path not in fonts_cache:
+            f = graphics.Font()
+            f.LoadFont(font_path)
+            fonts_cache[font_path] = f
+        font = fonts_cache[font_path]
+
+        fg = obj.get("fgColor", "#FFFFFF")
+        r, g, b = int(fg[1:3], 16), int(fg[3:5], 16), int(fg[5:7], 16)
+        color = graphics.Color(r, g, b)
+
+        text = obj.get("text", "")
+        x0, y0, w, h = obj["x"], obj["y"], obj["width"], obj["height"]
+        local = ClippedCanvas(canvas, x0, y0, w, h)
+        y_baseline_local = h - 2
+
+        if obj["type"] == "ScrollingTextbox":
+            if idx not in scroll_state:
+                scroll_state[idx] = w
+            pos_local = scroll_state[idx]
+            text_len = graphics.DrawText(local, font, pos_local, y_baseline_local, color, text)
+            scroll_state[idx] = pos_local - 1
+            if pos_local + text_len < 0:
+                scroll_state[idx] = w
+        else:
+            graphics.DrawText(local, font, 0, y_baseline_local, color, text)
+
+        if debug:
+            dbg_color = DEBUG_COLOURS[idx % len(DEBUG_COLOURS)]
+            for px in range(x0, x0 + w):
+                canvas.SetPixel(px, y0, dbg_color.red, dbg_color.green, dbg_color.blue)
+                canvas.SetPixel(px, y0 + h - 1, dbg_color.red, dbg_color.green, dbg_color.blue)
+            for py in range(y0, y0 + h):
+                canvas.SetPixel(x0, py, dbg_color.red, dbg_color.green, dbg_color.blue)
+                canvas.SetPixel(x0 + w - 1, py, dbg_color.red, dbg_color.green, dbg_color.blue)
+
+    canvas = matrix.SwapOnVSync(canvas)
+    return canvas, scroll_state
+
+# --- Main setup ---
 options = RGBMatrixOptions()
 options.rows = 32
 options.cols = 64
 options.chain_length = 2
 options.parallel = 1
-options.hardware_mapping = 'adafruit-hat'  # Use 'regular' for emulator
+options.hardware_mapping = 'adafruit-hat'
 
 matrix = RGBMatrix(options=options)
 canvas = matrix.CreateFrameCanvas()
-
-# Load font
-font = graphics.Font()
-font.LoadFont("./fonts/7x13.bdf")  # Ensure this path is correct
-
-# Set text color
-textColor = graphics.Color(255, 255, 255)
-
-# Text to scroll
-message = "Current time in Portland, USA!"
-pos = canvas.width
 
 layout = validateSchema.validate_layout("./layouts/1.json")
-objects = unpack_layout(layout, panel_width=options.cols * options.chain_length, panel_height=options.rows)
-matrix = RGBMatrix(options=options)
-canvas = matrix.CreateFrameCanvas()
+objects = unpack_layout(layout, panel_width=options.cols * options.chain_length,
+                        panel_height=options.rows)
+
+fonts_cache = {}
 scroll_state = {}
 
 while True:
-    canvas, scroll_state = draw_layout(matrix, canvas, objects, scroll_state=scroll_state)
+    canvas, scroll_state = draw_layout(matrix, canvas, objects,
+                                       fonts_cache=fonts_cache,
+                                       scroll_state=scroll_state)
     time.sleep(0.03)
