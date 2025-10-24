@@ -107,7 +107,7 @@ def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, de
         if obj["type"] not in ("Textbox", "ScrollingTextbox", "Alert"):
             continue
 
-        font_name = obj.get("font", "7x13.bdf")
+        font_name = obj.get("font", "4x6.bdf")
         font_path = font_name if os.path.isabs(font_name) else os.path.join('./fonts/', font_name)
 
         if font_path not in fonts_cache:

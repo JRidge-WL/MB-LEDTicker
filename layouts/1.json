@@ -5,26 +5,27 @@
     "background": "./assets/bg.jpg"
   },
   "objects": [
-
-    {
-      "type": "Group",
-      "x": "0px",
-      "y": "0px",
-      "width": "100%",
-      "height": "32px",
-      "horizontal": "left",
-      "vertical": "top",
-      "objects": []
-    },
     {
       "type": "Textbox",
       "x": "0%",
       "y": "0%",
-      "width": "100%",
+      "width": "50%",
       "height": "14px",
-      "text": "PST: 00:00AM",
-      "font": "7x13.bdf",
-      "fgColor": "#00FF00",
+      "text": "PTL: 00:00AM",
+      "font": "5x7.bdf",
+      "fgColor": "#FFFFFF",
+      "horizontal": "left",
+      "vertical": "top"
+    },
+        {
+      "type": "Textbox",
+      "x": "50%",
+      "y": "0%",
+      "width": "50%",
+      "height": "14px",
+      "text": "LON: 00:00AM",
+      "font": "5x7.bdf",
+      "fgColor": "#FFFF00",
       "horizontal": "left",
       "vertical": "top"
     }
