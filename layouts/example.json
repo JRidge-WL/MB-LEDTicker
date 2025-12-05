@@ -43,7 +43,7 @@
           "y": "0px",
           "width": "80%",
           "height": "100%",
-          "text": "{api:news.headline}",
+          "text": "{news.headline}",
           "font": "7x13.bdf",
           "fgColor": "#FFFFFF",
           "bgColor": "#000000",

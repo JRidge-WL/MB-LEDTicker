@@ -7,26 +7,26 @@
   "objects": [
     {
       "type": "Textbox",
-      "x": "0%",
+      "x": "12.5%",
       "y": "0%",
-      "width": "50%",
+      "width": "25%",
       "height": "14px",
-      "text": "PTL: {api:time:America/Los_Angeles}",
+      "text": "PTL: {getTime:get_24hr_time:America/Los_Angeles}",
       "font": "5x7.bdf",
       "fgColor": "#FFFFFF",
-      "horizontal": "left",
+      "horizontal": "centre",
       "vertical": "top"
     },
         {
       "type": "Textbox",
-      "x": "50%",
+      "x": "75%",
       "y": "0%",
       "width": "50%",
       "height": "14px",
-      "text": "LON: 00:00AM",
+      "text": "UK: {getTime:get_24hr_time:Europe/London}",
       "font": "5x7.bdf",
-      "fgColor": "#FFFF00",
-      "horizontal": "left",
+      "fgColor": "#FFFFFF",
+      "horizontal": "centre",
       "vertical": "top"
     },
             {
@@ -35,7 +35,7 @@
       "y": "50%",
       "width": "100%",
       "height": "14px",
-      "text": "Hello Microbyte / White Label! This is a scrolling ticker demo.",
+      "text": "NEWS: Time is now correct. It is currently {getTime:get_24hr_time:Europe/London} in the United Kingdom",
       "font": "5x7.bdf",
       "fgColor": "#FFFF00",
       "horizontal": "left",

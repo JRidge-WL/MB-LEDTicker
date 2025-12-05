@@ -1,6 +1,8 @@
 import os
 import time
-from scripts import getTime, validateSchema  # your custom modules
+from scripts import validateSchema, getTime  # your custom modules
+import scripts
+import re # regex
 
 # --- Platform detection ---
 def is_raspberry_pi():
@@ -94,6 +96,31 @@ def unpack_layout(layout: dict, panel_width: int, panel_height: int):
 
     return recurse(layout["objects"], panel_width, panel_height)
 
+# --- Check API Calls ---
+def checkAPICalls(inputText):
+
+    api_list = re.findall(r'\{(.*?)\}', inputText)
+    replace_list = []
+    outputText = inputText
+
+    if len(api_list) == 0:
+        return inputText # No API calls, so display the text as-is
+
+    for item in api_list:
+        vars = item.split(':')
+        
+        api_module = globals()[vars[0]]
+        func_to_call = getattr(api_module, vars[1])
+        argument = vars[2]
+
+        replacementText = func_to_call(argument)
+
+        outputText = outputText.replace("{" + item + "}", replacementText)
+
+
+    return outputText
+
+
 # --- Drawing logic ---
 def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False):
     if fonts_cache is None:
@@ -122,6 +149,9 @@ def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, de
 
         text = obj.get("text", "")
         x0, y0, w, h = obj["x"], obj["y"], obj["width"], obj["height"]
+
+        text = checkAPICalls(text)
+
         local = ClippedCanvas(canvas, x0, y0, w, h)
         y_baseline_local = h - 2
 
