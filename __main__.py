@@ -1,7 +1,7 @@
 import os
 import time
 from scripts import validateSchema, getTime  # your custom modules
-import scripts
+import scripts, statistics, warnings, math
 import re # regex
 
 # --- Platform detection ---
@@ -30,6 +30,12 @@ DEBUG_COLOURS = [
     graphics.Color(255, 255, 0), graphics.Color(255, 0, 255), graphics.Color(0, 255, 255),
     graphics.Color(255, 128, 0), graphics.Color(128, 0, 255)
 ]
+
+# Misc. Variables
+TARGET_FPS = 100
+TARGET_FRAME_TIME = 1.0 / (TARGET_FPS*1.045)
+ACTUAL_FRAME_TIMES = [0]
+ACTUAL_FPS = 0
 
 # --- ClippedCanvas helper ---
 class ClippedCanvas:
@@ -203,8 +209,22 @@ objects = unpack_layout(layout, panel_width=options.cols * options.chain_length,
 fonts_cache = {}
 scroll_state = {}
 
+supress_fps_warning = 0
+
 while True:
+    frame_start_time = time.time()
+    if len(ACTUAL_FRAME_TIMES) > 10:
+        ACTUAL_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES[-10:])
+        ACTUAL_FRAME_TIMES = ACTUAL_FRAME_TIMES[-100:]
+        if ACTUAL_FPS < 0.9 * TARGET_FPS and supress_fps_warning <= 0:
+            warnings.warn(f"FPS has dropped below acceptable threshold! Currently at {ACTUAL_FPS}. Target of {TARGET_FPS}", Warning)
+
     canvas, scroll_state = draw_layout(matrix, canvas, objects,
                                        fonts_cache=fonts_cache,
                                        scroll_state=scroll_state)
-    time.sleep(0.03)
+    frame_end_time = time.time()
+    sleep_time = TARGET_FRAME_TIME - (frame_end_time - frame_start_time)
+
+    if sleep_time > 0:
+        time.sleep(sleep_time)
+    ACTUAL_FRAME_TIMES.append(time.time() - frame_start_time)
