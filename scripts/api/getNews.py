@@ -28,6 +28,8 @@ class NewsParser(object):
         ]
         self.refresh_interval = 600 # Max Seconds before refreshing the news feed.
         self._news_items = []
+        self._upcoming_news_items = []
+        self.update_pending = False
         self._last_refresh = None
         self._current_item_index = 0
 
@@ -102,7 +104,8 @@ class NewsParser(object):
         # but sorting by the 'published' string works fine for reverse chronological order in most cases.
         # all_entries.sort(key=lambda item: item['published'], reverse=True) 
 
-        self._news_items = all_entries
+        self._upcoming_news_items = all_entries
+        self.update_pending = True
         print(f"News refresh complete. Total items found in last 6 hours: {len(self._news_items)}")
 
 
@@ -132,6 +135,13 @@ class NewsParser(object):
         Advances the internal index to select the next news item in the list.
         Cycles back to the start if the end is reached.
         """
+
+        if self.update_pending:
+            self._current_item_index = 0
+            self._news_items = self._upcoming_news_items
+            self.update_pending = False
+            self._upcoming_news_items = 0
+
         if not self._news_items:
             return # Cannot advance if there are no items
             

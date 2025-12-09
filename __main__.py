@@ -256,15 +256,12 @@ async def draw():
         ACTUAL_FRAME_TIMES.append(time.perf_counter() - frame_start_time)
 
 async def update():
-    pass
+    while True:
+        await NewsParser.refresh_news_feed()
+        await asyncio.sleep(0.5)
     # Background updates that should be run seperately to the draw loop to not affect FPS.
 
 async def main():
-
-    # Refresh news feeds
-
-    await NewsParser.refresh_news_feed()
-    NewsParser.next_news()
 
     # Runs both update & draw funcs
 
