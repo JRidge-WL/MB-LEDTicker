@@ -4,8 +4,9 @@ from scripts import validateSchema  # your custom modules
 import statistics, warnings, math, asyncio
 import re
 import scripts.api
+from scripts.api import getTime, getNews # regex
 
-from scripts.api import getTime # regex
+NewsParser = scripts.api.getNews.NewsParser()
 
 # --- Platform detection ---
 def is_raspberry_pi():
@@ -93,14 +94,15 @@ async def unpack_layout(layout: dict, panel_width: int, panel_height: int):
                     "text": obj.get("text"), "path": obj.get("path"),
                     "font": obj.get("font"), "fgColor": obj.get("fgColor"),
                     "bgColor": obj.get("bgColor"), "scrollSpeed": obj.get("scrollSpeed"),
-                    "dataSource": obj.get("dataSource"), "dataParams": obj.get("dataParams")
+                    "dataSource": obj.get("dataSource"), "dataParams": obj.get("dataParams"),
+                    "onScrollEnd": obj.get("onScrollEnd")
                 })
         return flat
 
     return recurse(layout["objects"], panel_width, panel_height)
 
 # --- Check API Calls ---
-async def checkAPICalls(inputText):
+async def checkAPICalls(inputText, returnText = True):
 
     api_list = re.findall(r'\{(.*?)\}', inputText)
     replace_list = []
@@ -114,15 +116,19 @@ async def checkAPICalls(inputText):
         
         api_module = globals()[vars[0]]
         func_to_call = getattr(api_module, vars[1])
-        argument = vars[2]
+        if len(vars) > 2:
+            argument = vars[2]
+            replacementText = func_to_call(argument)
+        else:
+            replacementText = func_to_call()
 
-        replacementText = func_to_call(argument)
+        if returnText:
+            outputText = outputText.replace("{" + item + "}", replacementText)
 
-        outputText = outputText.replace("{" + item + "}", replacementText)
-
-
+    if not returnText:
+        return
+    
     return outputText
-
 
 # --- Drawing logic ---
 async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False):
@@ -159,8 +165,10 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
         y_baseline_local = h - 2
 
         if obj["type"] == "ScrollingTextbox":
+            onScrollEnd = obj.get("onScrollEnd", "")
             if idx not in scroll_state:
                 scroll_state[idx] = w
+                await checkAPICalls(onScrollEnd, False)
             pos_local = scroll_state[idx]
             # draw directly on the real canvas, offset into the object's box
             text_len = graphics.DrawText(canvas, font,
@@ -170,6 +178,9 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
             scroll_state[idx] = pos_local - 1
             if pos_local + text_len < 0:
                 scroll_state[idx] = w
+                # Check for end-scroll behaviour
+                await checkAPICalls(onScrollEnd, False)
+
         else:
             graphics.DrawText(canvas, font,
                   x0,
@@ -221,29 +232,33 @@ async def draw():
     # The main draw loop
 
     while True:
-        frame_start_time = time.time()
-        if len(ACTUAL_FRAME_TIMES) > 10:
+        frame_start_time = time.perf_counter()
+        if len(ACTUAL_FRAME_TIMES) > TARGET_FPS/5:
             ACTUAL_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES[-10:])
-            ACTUAL_FRAME_TIMES = ACTUAL_FRAME_TIMES[-100:]
-            if ACTUAL_FPS < 0.8 * TARGET_FPS and supress_fps_warning <= 0:
-                #warnings.warn(f"FPS has dropped below acceptable threshold! Currently at {ACTUAL_FPS}. Target of {TARGET_FPS}", Warning)
-                pass
+            AVG_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES)
+            ACTUAL_FRAME_TIMES = ACTUAL_FRAME_TIMES[-10000:]
+            print(f"Current FPS: {ACTUAL_FPS:3.0f} | Average FPS: {AVG_FPS:5.1f}", end='\r', flush=True)
 
         canvas, scroll_state = await draw_layout(matrix, canvas, objects,
                                         fonts_cache=fonts_cache,
                                         scroll_state=scroll_state)
-        frame_end_time = time.time()
+        frame_end_time = time.perf_counter()
         sleep_time = TARGET_FRAME_TIME - (frame_end_time - frame_start_time)
 
         if sleep_time > 0:
-            asyncio.sleep(sleep_time)
-        ACTUAL_FRAME_TIMES.append(time.time() - frame_start_time)
+            await asyncio.sleep(sleep_time)
+        ACTUAL_FRAME_TIMES.append(time.perf_counter() - frame_start_time)
 
 async def update():
     pass
     # Background updates that should be run seperately to the draw loop to not affect FPS.
 
 async def main():
+
+    # Refresh news feeds
+
+    await NewsParser.refresh_news_feed()
+    NewsParser.next_news()
 
     # Runs both update & draw funcs
 

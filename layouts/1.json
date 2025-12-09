@@ -35,12 +35,13 @@
       "y": "50%",
       "width": "100%",
       "height": "14px",
-      "text": "NEWS: Time is now correct. It is currently {getTime:get_24hr_time:Europe/London} in the United Kingdom",
+      "text": "NEWS: {NewsParser:get_current_news_str}",
       "font": "5x7.bdf",
       "fgColor": "#FFFF00",
       "horizontal": "left",
       "vertical": "top",
-      "scrollSpeed": 2
+      "scrollSpeed": 2,
+      "onScrollEnd": "{NewsParser:next_news}"
     }
   ]
 }
