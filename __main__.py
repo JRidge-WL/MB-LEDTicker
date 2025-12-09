@@ -1,8 +1,11 @@
 import os
 import time
-from scripts import validateSchema, getTime  # your custom modules
-import scripts, statistics, warnings, math
-import re # regex
+from scripts import validateSchema  # your custom modules
+import statistics, warnings, math, asyncio
+import re
+import scripts.api
+
+from scripts.api import getTime # regex
 
 # --- Platform detection ---
 def is_raspberry_pi():
@@ -31,12 +34,6 @@ DEBUG_COLOURS = [
     graphics.Color(255, 128, 0), graphics.Color(128, 0, 255)
 ]
 
-# Misc. Variables
-TARGET_FPS = 100
-TARGET_FRAME_TIME = 1.0 / (TARGET_FPS*1.045)
-ACTUAL_FRAME_TIMES = [0]
-ACTUAL_FPS = 0
-
 # --- ClippedCanvas helper ---
 class ClippedCanvas:
     def __init__(self, real_canvas, offset_x, offset_y, width, height):
@@ -54,7 +51,7 @@ class ClippedCanvas:
                 self._canvas.SetPixel(self.offset_x + lx, self.offset_y + ly, 0, 0, 0)
 
 # --- Layout unpacker ---
-def unpack_layout(layout: dict, panel_width: int, panel_height: int):
+async def unpack_layout(layout: dict, panel_width: int, panel_height: int):
     def parse_dimension(value: str, total: int) -> int:
         if value.endswith("%"):
             return int(float(value[:-1]) / 100 * total)
@@ -103,7 +100,7 @@ def unpack_layout(layout: dict, panel_width: int, panel_height: int):
     return recurse(layout["objects"], panel_width, panel_height)
 
 # --- Check API Calls ---
-def checkAPICalls(inputText):
+async def checkAPICalls(inputText):
 
     api_list = re.findall(r'\{(.*?)\}', inputText)
     replace_list = []
@@ -128,7 +125,7 @@ def checkAPICalls(inputText):
 
 
 # --- Drawing logic ---
-def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False):
+async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False):
     if fonts_cache is None:
         fonts_cache = {}
     if scroll_state is None:
@@ -156,7 +153,7 @@ def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, de
         text = obj.get("text", "")
         x0, y0, w, h = obj["x"], obj["y"], obj["width"], obj["height"]
 
-        text = checkAPICalls(text)
+        text = await checkAPICalls(text)
 
         local = ClippedCanvas(canvas, x0, y0, w, h)
         y_baseline_local = h - 2
@@ -191,40 +188,83 @@ def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, de
     canvas = matrix.SwapOnVSync(canvas)
     return canvas, scroll_state
 
-# --- Main setup ---
-options = RGBMatrixOptions()
-options.rows = 32
-options.cols = 64
-options.chain_length = 2
-options.parallel = 1
-options.hardware_mapping = 'adafruit-hat'
 
-matrix = RGBMatrix(options=options)
-canvas = matrix.CreateFrameCanvas()
+# Misc. Variables
+TARGET_FPS = 100
+TARGET_FRAME_TIME = 1.0 / (TARGET_FPS*1.045)
+ACTUAL_FRAME_TIMES = [0]
+ACTUAL_FPS = 0
 
-layout = validateSchema.validate_layout("./layouts/1.json")
-objects = unpack_layout(layout, panel_width=options.cols * options.chain_length,
-                        panel_height=options.rows)
+async def draw():
+    global ACTUAL_FRAME_TIMES, ACTUAL_FPS
 
-fonts_cache = {}
-scroll_state = {}
+    # Init variables required for draw
 
-supress_fps_warning = 0
+    # --- Main setup ---
+    options = RGBMatrixOptions()
+    options.rows = 32
+    options.cols = 64
+    options.chain_length = 2
+    options.parallel = 1
+    options.hardware_mapping = 'adafruit-hat'
 
-while True:
-    frame_start_time = time.time()
-    if len(ACTUAL_FRAME_TIMES) > 10:
-        ACTUAL_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES[-10:])
-        ACTUAL_FRAME_TIMES = ACTUAL_FRAME_TIMES[-100:]
-        if ACTUAL_FPS < 0.9 * TARGET_FPS and supress_fps_warning <= 0:
-            warnings.warn(f"FPS has dropped below acceptable threshold! Currently at {ACTUAL_FPS}. Target of {TARGET_FPS}", Warning)
+    matrix = RGBMatrix(options=options)
+    canvas = matrix.CreateFrameCanvas()
 
-    canvas, scroll_state = draw_layout(matrix, canvas, objects,
-                                       fonts_cache=fonts_cache,
-                                       scroll_state=scroll_state)
-    frame_end_time = time.time()
-    sleep_time = TARGET_FRAME_TIME - (frame_end_time - frame_start_time)
+    layout = validateSchema.validate_layout("./layouts/1.json")
+    objects = await unpack_layout(layout, panel_width=options.cols * options.chain_length,
+                            panel_height=options.rows)
 
-    if sleep_time > 0:
-        time.sleep(sleep_time)
-    ACTUAL_FRAME_TIMES.append(time.time() - frame_start_time)
+    fonts_cache = {}
+    scroll_state = {}
+
+    # The main draw loop
+
+    while True:
+        frame_start_time = time.time()
+        if len(ACTUAL_FRAME_TIMES) > 10:
+            ACTUAL_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES[-10:])
+            ACTUAL_FRAME_TIMES = ACTUAL_FRAME_TIMES[-100:]
+            if ACTUAL_FPS < 0.8 * TARGET_FPS and supress_fps_warning <= 0:
+                #warnings.warn(f"FPS has dropped below acceptable threshold! Currently at {ACTUAL_FPS}. Target of {TARGET_FPS}", Warning)
+                pass
+
+        canvas, scroll_state = await draw_layout(matrix, canvas, objects,
+                                        fonts_cache=fonts_cache,
+                                        scroll_state=scroll_state)
+        frame_end_time = time.time()
+        sleep_time = TARGET_FRAME_TIME - (frame_end_time - frame_start_time)
+
+        if sleep_time > 0:
+            asyncio.sleep(sleep_time)
+        ACTUAL_FRAME_TIMES.append(time.time() - frame_start_time)
+
+async def update():
+    pass
+    # Background updates that should be run seperately to the draw loop to not affect FPS.
+
+async def main():
+
+    # Runs both update & draw funcs
+
+    supress_fps_warning = 0
+
+    task_draw = asyncio.create_task(draw())
+    task_update = asyncio.create_task(update())
+
+        # Keep the main loop running indefinitely while the tasks execute concurrently
+    try:
+        # Wait for all tasks to complete (which they won't, due to while True, keeping main alive)
+        await asyncio.gather(task_draw, task_update)
+    except asyncio.CancelledError:
+        # Handle cleanup if tasks are cancelled
+        pass
+
+
+# The entry point of the script
+if __name__ == "__main__":
+    try:
+        # This starts the asyncio event loop and runs your function
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Loop terminated by user (Ctrl+C).")
