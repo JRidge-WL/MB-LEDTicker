@@ -40,7 +40,7 @@
       "fgColor": "#FFFF00",
       "horizontal": "left",
       "vertical": "top",
-      "scrollSpeed": 2,
+      "scrollSpeed": 1,
       "onScrollEnd": "{NewsParser:next_news}"
     }
   ]

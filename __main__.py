@@ -131,7 +131,7 @@ async def checkAPICalls(inputText, returnText = True):
     return outputText
 
 # --- Drawing logic ---
-async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False):
+async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False, dt=0):
     if fonts_cache is None:
         fonts_cache = {}
     if scroll_state is None:
@@ -172,10 +172,10 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
             pos_local = scroll_state[idx]
             # draw directly on the real canvas, offset into the object's box
             text_len = graphics.DrawText(canvas, font,
-                                        x0 + pos_local,
-                                        y0 + y_baseline_local,
+                                        int(x0) + int(pos_local),
+                                        int(y0) + y_baseline_local,
                                         color, text)
-            scroll_state[idx] = pos_local - 1
+            scroll_state[idx] = pos_local - (30 * dt)
             if pos_local + text_len < 0:
                 scroll_state[idx] = w
                 # Check for end-scroll behaviour
@@ -231,8 +231,13 @@ async def draw():
 
     # The main draw loop
 
+    frame_end_time = time.perf_counter()
+
     while True:
         frame_start_time = time.perf_counter()
+
+        dt = frame_start_time - frame_end_time
+
         if len(ACTUAL_FRAME_TIMES) > TARGET_FPS/5:
             ACTUAL_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES[-10:])
             AVG_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES)
@@ -241,8 +246,9 @@ async def draw():
 
         canvas, scroll_state = await draw_layout(matrix, canvas, objects,
                                         fonts_cache=fonts_cache,
-                                        scroll_state=scroll_state)
+                                        scroll_state=scroll_state, dt=dt)
         frame_end_time = time.perf_counter()
+        
         sleep_time = TARGET_FRAME_TIME - (frame_end_time - frame_start_time)
 
         if sleep_time > 0:
