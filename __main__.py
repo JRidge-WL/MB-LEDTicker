@@ -282,7 +282,7 @@ async def draw():
     options.chain_length = 2
     options.parallel = 1
     options.hardware_mapping = 'adafruit-hat'
-    options.gpio_slowdown = 0
+    options.gpio_slowdown = 2
 
     matrix = RGBMatrix(options=options)
     canvas = matrix.CreateFrameCanvas()
