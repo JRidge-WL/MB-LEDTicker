@@ -46,13 +46,18 @@
 
         "horizontal": {
           "type": "string",
-          "enum": ["left", "centre", "right"],
+          "enum": ["left", "center", "right"],
           "description": "Horizontal origin for positioning"
         },
         "vertical": {
           "type": "string",
-          "enum": ["top", "centre", "bottom"],
+          "enum": ["top", "center", "bottom"],
           "description": "Vertical origin for positioning"
+        },
+        "text_align": {
+          "type": "string",
+          "enum": ["left", "center", "right"],
+          "description": "Alignment of the text content inside the bounding box"
         },
 
         "path": {
@@ -113,7 +118,10 @@
         },
         {
           "if": { "properties": { "type": { "const": "Image" } } },
-          "then": { "required": ["path"] }
+          "then": { 
+            "required": ["path"],
+            "not": { "required": ["text_align"] }
+          }
         }
       ]
     },
@@ -129,11 +137,11 @@
         "height": { "$ref": "#/$defs/dimension" },
         "horizontal": {
           "type": "string",
-          "enum": ["left", "centre", "right"]
+          "enum": ["left", "center", "right"]
         },
         "vertical": {
           "type": "string",
-          "enum": ["top", "centre", "bottom"]
+          "enum": ["top", "center", "bottom"]
         },
         "objects": {
           "type": "array",

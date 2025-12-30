@@ -18,13 +18,17 @@ class NewsParser(object):
     def __init__(self):
         self.feeds = [
             "https://smartermsp.com/feed/",
-            "https://www.kaseya.com/blog/feed/",
+            "https://mspmastered.com/feed/",
             "https://www.theregister.com/headlines.atom",
             "https://stackoverflow.blog/feed/atom/",
             "https://www.bleepingcomputer.com/feed/",
             "https://us-cert.cisa.gov/ncas/alerts.xml",
             "https://api.msrc.microsoft.com/update-guide/rss",
-            "http://feeds.arstechnica.com/arstechnica/index?format=xml"
+            "http://feeds.arstechnica.com/arstechnica/index?format=xml",
+            "https://www.cloudtango.net/blog/feed/",
+            "https://www.ninjaone.com/blog/category/growth/feed/",
+            "https://feeds.bbci.co.uk/news/technology/rss.xml"
+
         ]
         self.refresh_interval = 600 # Max Seconds before refreshing the news feed.
         self._news_items = []
@@ -57,7 +61,7 @@ class NewsParser(object):
         self._last_refresh = datetime.now()
         
         # Calculate the threshold time (6 hours ago) in UTC
-        six_hours_ago = datetime.now(ZoneInfo("UTC")) - timedelta(hours=6)
+        six_hours_ago = datetime.now(ZoneInfo("UTC")) - timedelta(hours=12) # i don't want to rename the variable but i changed it to 12 hours
 
         # Use a single aiohttp session for efficiency
         async with aiohttp.ClientSession() as session:
@@ -106,7 +110,7 @@ class NewsParser(object):
 
         self._upcoming_news_items = all_entries
         self.update_pending = True
-        print(f"News refresh complete. Total items found in last 6 hours: {len(self._news_items)}")
+        print(f"News refresh complete. Total items found in last 6 hours: {len(self._upcoming_news_items)}")
 
 
     def get_news_feed(self):
@@ -126,7 +130,7 @@ class NewsParser(object):
         item = self._news_items[self._current_item_index]
 
         # Format the string
-        news_string = f"{item['title']} - {item['publisher']}"
+        news_string = f"{item['title']}"
             
         return news_string
 

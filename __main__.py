@@ -62,11 +62,11 @@ async def unpack_layout(layout: dict, panel_width: int, panel_height: int):
             raise ValueError(f"Invalid dimension: {value}")
 
     def apply_alignment(x, y, w, h, horiz, vert):
-        if horiz == "centre":
+        if horiz == "center":
             x -= w // 2
         elif horiz == "right":
             x -= w
-        if vert == "centre":
+        if vert == "center":
             y -= h // 2
         elif vert == "bottom":
             y -= h
@@ -95,7 +95,8 @@ async def unpack_layout(layout: dict, panel_width: int, panel_height: int):
                     "font": obj.get("font"), "fgColor": obj.get("fgColor"),
                     "bgColor": obj.get("bgColor"), "scrollSpeed": obj.get("scrollSpeed"),
                     "dataSource": obj.get("dataSource"), "dataParams": obj.get("dataParams"),
-                    "onScrollEnd": obj.get("onScrollEnd")
+                    "onScrollEnd": obj.get("onScrollEnd"),
+                    "text_align": obj.get("text_align", "left")
                 })
         return flat
 
@@ -130,7 +131,48 @@ async def checkAPICalls(inputText, returnText = True):
     
     return outputText
 
+def draw_colour_text(canvas, font, x, y, default_color, text):
+    """
+    Replacement for draw_colour_text that supports inline [fg:#RRGGBB] and [bg:#RRGGBB] tags.
+    Returns the total visual width of the rendered text.
+    """
+    # 1. Setup Parser Logic
+    pattern = r'(\[(?:fg|bg):(?:#[0-9a-fA-F]{6}|none)\])'
+    parts = re.split(pattern, text)
+    
+    def hex_to_col(hex_str):
+        if not hex_str or hex_str == "none": return default_color
+        return graphics.Color(int(hex_str[1:3], 16), int(hex_str[3:5], 16), int(hex_str[5:7], 16))
+
+    current_x = x
+    curr_fg = default_color
+    total_visual_width = 0
+
+    for part in parts:
+        if not part:
+            continue
+            
+        # Check if part is a tag
+        tag_match = re.match(r'\[(fg|bg):(.*)\]', part)
+        if tag_match:
+            tag_type, val = tag_match.groups()
+            if tag_type == "fg":
+                curr_fg = hex_to_col(val)
+            # Note: bg support depends on your specific matrix implementation 
+            # standard rpi-rgb-led-matrix DrawText only supports fg color.
+            continue
+        
+        # It's actual text
+        # draw_colour_text returns the width of the text drawn
+        width = graphics.DrawText(canvas, font, int(current_x), int(y), curr_fg, part)
+        
+        current_x += width
+        total_visual_width += width
+
+    return total_visual_width
+
 # --- Drawing logic ---
+
 async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False, dt=0):
     if fonts_cache is None:
         fonts_cache = {}
@@ -143,50 +185,71 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
         if obj["type"] not in ("Textbox", "ScrollingTextbox", "Alert"):
             continue
 
+        # Font Loading
         font_name = obj.get("font", "4x6.bdf")
         font_path = font_name if os.path.isabs(font_name) else os.path.join('./fonts/', font_name)
-
         if font_path not in fonts_cache:
             f = graphics.Font()
             f.LoadFont(font_path)
             fonts_cache[font_path] = f
         font = fonts_cache[font_path]
 
+        # Color Parsing
         fg = obj.get("fgColor", "#FFFFFF")
+        bg = obj.get("bgColor", "#FF0000")
         r, g, b = int(fg[1:3], 16), int(fg[3:5], 16), int(fg[5:7], 16)
         color = graphics.Color(r, g, b)
 
+        # Dimensions and Content
         text = obj.get("text", "")
         x0, y0, w, h = obj["x"], obj["y"], obj["width"], obj["height"]
-
+        text_align = obj.get("text_align", "left")
+        
+        # Process API Calls in Text
         text = await checkAPICalls(text)
 
-        local = ClippedCanvas(canvas, x0, y0, w, h)
-        y_baseline_local = h - 2
+        # Calculate Text Metrics
+        # CharacterWidth returns pixels for the string; font.height is the max height
+        text_width = sum(font.CharacterWidth(ord(c)) for c in text)
+        
+        # Vertical Centering: 
+        # Baseline is calculated so the font height is centered in the box height
+        y_baseline_local = (h + font.height) // 2 - 1
 
         if obj["type"] == "ScrollingTextbox":
             onScrollEnd = obj.get("onScrollEnd", "")
             if idx not in scroll_state:
                 scroll_state[idx] = w
                 await checkAPICalls(onScrollEnd, False)
+            
             pos_local = scroll_state[idx]
-            # draw directly on the real canvas, offset into the object's box
-            text_len = graphics.DrawText(canvas, font,
-                                        int(x0) + int(pos_local),
-                                        int(y0) + y_baseline_local,
-                                        color, text)
+            
+            # Draw scrolling text (starting at current scroll pos)
+            draw_colour_text(canvas, font,
+                              int(x0) + int(pos_local),
+                              int(y0) + y_baseline_local,
+                              color, text)
+            
+            # Update scroll position
             scroll_state[idx] = pos_local - (30 * dt)
-            if pos_local + text_len < 0:
+            if pos_local + text_width < 0:
                 scroll_state[idx] = w
-                # Check for end-scroll behaviour
                 await checkAPICalls(onScrollEnd, False)
 
         else:
-            graphics.DrawText(canvas, font,
-                  x0,
-                  y0 + y_baseline_local,
-                  color, text)
+            # Static Text Horizontal Alignment
+            text_x_offset = 0
+            if text_align == "center":
+                text_x_offset = (w - text_width) // 2
+            elif text_align == "right":
+                text_x_offset = w - text_width
 
+            draw_colour_text(canvas, font,
+                              x0 + text_x_offset,
+                              y0 + y_baseline_local,
+                              color, text)
+
+        # Debug bounding boxes
         if debug:
             dbg_color = DEBUG_COLOURS[idx % len(DEBUG_COLOURS)]
             for px in range(x0, x0 + w):
@@ -198,6 +261,7 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
 
     canvas = matrix.SwapOnVSync(canvas)
     return canvas, scroll_state
+
 
 
 # Misc. Variables
@@ -218,6 +282,7 @@ async def draw():
     options.chain_length = 2
     options.parallel = 1
     options.hardware_mapping = 'adafruit-hat'
+    options.gpio_slowdown = 0
 
     matrix = RGBMatrix(options=options)
     canvas = matrix.CreateFrameCanvas()
