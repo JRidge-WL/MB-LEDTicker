@@ -147,6 +147,7 @@ def draw_colour_text(canvas, font, x, y, default_color, text):
 
     current_x = x
     curr_fg = default_color
+    curr_bg = None
     total_visual_width = 0
 
     for part in parts:
@@ -159,14 +160,26 @@ def draw_colour_text(canvas, font, x, y, default_color, text):
             tag_type, val = tag_match.groups()
             if tag_type == "fg":
                 curr_fg = hex_to_col(val)
+            elif tag_type == "bg":
+                curr_bg = hex_to_col(val)
             # Note: bg support depends on your specific matrix implementation 
             # standard rpi-rgb-led-matrix DrawText only supports fg color.
             continue
         
         # It's actual text
         # draw_colour_text returns the width of the text drawn
+
+        # draw the bg colour behind the text
+
+        if curr_bg:
+            bg_width = graphics.DrawText(canvas, font, int(current_x), int(y), curr_fg, part) + 2
+            bg_height = font.height + 2
+
+            for bg_y in range(bg_height):
+                graphics.DrawLine(canvas, int(current_x - 1), int(y - bg_y + 1), int(current_x + bg_width), int(y - bg_y + 1), curr_bg)
+
         width = graphics.DrawText(canvas, font, int(current_x), int(y), curr_fg, part)
-        
+
         current_x += width
         total_visual_width += width
 
@@ -280,10 +293,10 @@ async def draw():
     options = RGBMatrixOptions()
     options.rows = 32
     options.cols = 64
-    options.chain_length = 8
+    options.chain_length = 2
     options.parallel = 1
     options.hardware_mapping = 'adafruit-hat'
-    options.gpio_slowdown = 2
+    options.gpio_slowdown = 4
 
     matrix = RGBMatrix(options=options)
     canvas = matrix.CreateFrameCanvas()

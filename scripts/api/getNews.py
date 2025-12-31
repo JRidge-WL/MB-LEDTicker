@@ -118,12 +118,12 @@ class NewsParser(object):
         """
         if not self._news_items:
             # Fallback text if the list is empty
-            return "Loading news... Please wait for initial sync."
+            return "[bg:#FFFF00][fg:#000000]Loading news...[bg:#000000][fg:#FFFFFF] Please wait for initial sync."
         
         # Get the current item using the index
         item = self._news_items[self._current_item_index]
             
-        return f"[fg:#FFFF00]{item['publisher'].upper()}:[fg:#ffffff] {item['title']}"
+        return f"[bg:#FFFF00][fg:#000000]{item['publisher'].upper()}:[fg:#ffffff][bg:#000000] {item['title']}"
 
     def next_news(self):
         """
