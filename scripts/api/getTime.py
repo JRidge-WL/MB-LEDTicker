@@ -9,7 +9,7 @@ def get_24hr_time(timezone_str):
         return f"Unknown timezone: {timezone_str}"
     
     now = datetime.now(tz)
-    return now.strftime("%H:%M")
+    return now.strftime("%H:%M:%S")
 
 def get_12hr_time(timezone_str):
     try:
@@ -18,4 +18,4 @@ def get_12hr_time(timezone_str):
         return f"Unknown timezone: {timezone_str}"
     
     now = datetime.now(tz)
-    return now.strftime("%I:%M %p")
+    return now.strftime("%I:%M:%S %p")

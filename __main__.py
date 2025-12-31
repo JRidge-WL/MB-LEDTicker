@@ -4,10 +4,11 @@ from scripts import validateSchema  # your custom modules
 import statistics, warnings, math, asyncio
 import re
 import scripts.api
-from scripts.api import getTime, getNews # regex
+from scripts.api import getTime, getNews, getTeams # regex
 from collections import deque
 
 NewsParser = scripts.api.getNews.NewsParser()
+TeamsParser = scripts.api.getTeams.TeamsParser()
 
 # --- Platform detection ---
 def is_raspberry_pi():

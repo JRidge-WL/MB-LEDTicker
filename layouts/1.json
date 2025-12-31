@@ -39,7 +39,7 @@
       "height": "14px",
       "text": "{NewsParser:get_current_news_str}",
       "font": "7x13.bdf",
-      "fgColor": "#FFFF00",
+      "fgColor": "#FFFFFF",
       "horizontal": "left",
       "vertical": "top",
       "scrollSpeed": 1,
