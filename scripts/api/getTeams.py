@@ -1,6 +1,6 @@
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
-import aiohttp, feedparser, asyncio, random
+import requests
 
 class Singleton(type):
     def __init__(cls, name, bases, dict):
@@ -17,8 +17,8 @@ class TeamsParser(object):
     __metaclass__ = Singleton
     def __init__(self):
         self.refresh_interval = 600 # Max Seconds before refreshing the news feed.
-        self._teams_items = []
-        self._new_teams_items = []
+        self._teams_messages = []
+        self._new_teams_messages = []
         self.update_pending = False
         self._last_refresh = None
         self._current_item_index = 0
@@ -30,29 +30,27 @@ class TeamsParser(object):
         if self._last_refresh and (datetime.now() - self._last_refresh) < timedelta(seconds=self.refresh_interval):
             # print("Refresh interval not yet passed, skipping.")
             return
-
-        print("\nRefreshing Teams messages asynchronously...")
         self._last_refresh = datetime.now()
 
-    def get_news_feed(self):
-        """Returns the last cached list of news items."""
-        return self._news_items
+    def get_teams_feed(self):
+        """Returns the last cached list of teams messages."""
+        return self._teams_messages
     
-    def get_current_news_str(self) -> str:
+    def get_current_teams_str(self) -> str:
         """
-        Gets the news item currently selected by the index.
-        Format: 'HEADLINE - Reporter'
+        Gets the teams item currently selected by the index.
+        Format: 'SENDER: Message'
         """
-        if not self._news_items:
+        if not self._teams_messages or len(self._teams_messages) == 0:
             # Fallback text if the list is empty
-            return "[bg:#FFFF00][fg:#000000]Loading news...[bg:#000000][fg:#FFFFFF] Please wait for initial sync."
+            return "No new messages!"
         
         # Get the current item using the index
-        item = self._news_items[self._current_item_index]
+        item = self._teams_messages[self._current_item_index]
             
         return f"[bg:#FFFF00][fg:#000000]{item['publisher'].upper()}:[fg:#ffffff][bg:#000000] {item['title']}"
 
-    def next_news(self):
+    def next_message(self):
         """
         Advances the internal index to select the next news item in the list.
         Cycles back to the start if the end is reached.
@@ -60,19 +58,16 @@ class TeamsParser(object):
 
         if self.update_pending:
             self._current_item_index = 0
-            self._news_items = self._upcoming_news_items
+            self._teams_messages = self._upcoming_teams_messages
             self.update_pending = False
-            self._upcoming_news_items = 0
+            self._upcoming_teams_messages = 0
 
-        if not self._news_items:
+        if not self._teams_messages:
             return # Cannot advance if there are no items
             
         # Increment the index
         self._current_item_index += 1
         
         # If we reach the end of the list, loop back to the start (0)
-        if self._current_item_index >= len(self._news_items):
+        if self._current_item_index >= len(self._teams_messages):
             self._current_item_index = 0
-        
-        # Optional: Print the new item selection for debugging
-        # print(f"\nAdvanced news item index to {self._current_item_index}")
