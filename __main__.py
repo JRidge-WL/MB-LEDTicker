@@ -6,6 +6,8 @@ import re
 import scripts.api
 from scripts.api import getTime, getNews, getTeams # regex
 from collections import deque
+from datetime import datetime
+from PIL import Image, ImageDraw
 
 NewsParser = scripts.api.getNews.NewsParser()
 TeamsParser = scripts.api.getTeams.TeamsParser()
@@ -194,10 +196,12 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
     if scroll_state is None:
         scroll_state = {}
 
-    canvas.Clear()
-
     for idx, obj in enumerate(objects):
-        if obj["type"] not in ("Textbox", "ScrollingTextbox", "Alert"):
+        if obj["type"] not in ("Textbox", "ScrollingTextbox", "Alert", "Image"):
+            continue
+
+        if obj["type"] == "Image":
+            print("image")
             continue
 
         # Font Loading
@@ -276,8 +280,68 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
 
     canvas = matrix.SwapOnVSync(canvas)
     return canvas, scroll_state
+    
+async def draw_sun_gradient(matrix, canvas):
+    now = datetime.now()
+    day_ratio = (now.hour * 3600 + now.minute * 60 + now.second) / 86400.0
 
+    # 1. Vibrant Palette
+    night_col = (15, 15, 60)
+    day_yellow = (255, 255, 0)
+    sunset_pink = (255, 20, 147)
 
+    # 2. Position (FIXED for Left-to-Right movement & Noon at 25%)
+    # We use a linear interpolation from 6am (0.25 ratio) to 9pm (0.875 ratio)
+    # 6am should start off-screen left (e.g., -0.1), 9pm should end off-screen right (e.g., 1.1)
+    
+    start_time = 0.25 # 6 AM
+    end_time = 0.875  # 9 PM
+    
+    # Calculate how far through the visible day we are (0.0 to 1.0+)
+    progress = (day_ratio - start_time) / (end_time - start_time)
+    
+    # We need to adjust 'progress' so that when day_ratio is 0.5 (noon), progress maps to 0.25 (25% screen)
+    # The actual mapping for noon is already close enough using a simple mapping of the time window
+    pos_ratio = progress 
+    
+    # Ensure sun is off-screen during true night if needed, or use the modulo wrap-around
+    # For a simple Left -> Right, we stick with this linear map:
+    if pos_ratio < 0 or pos_ratio > 1:
+         # Optional: if you want the sun to be fully off the screen during true night
+         pass
+    
+    sun_x = int(matrix.width * pos_ratio)
+    
+    # 3. Size of the bands (as you had it)
+    glow_radius = matrix.width * 0.3
+    
+    for x in range(matrix.width):
+        dx = abs(x - sun_x)
+        # Keep wrap around for continuous feel as requested previously
+        if dx > matrix.width / 2:
+            dx = matrix.width - dx
+            
+        dist = dx / glow_radius
+        dist = min(1.0, dist)
+
+        # 4. MULTI-STAGE GRADIENT LOGIC (Fixed TypeErrors)
+        if dist < 0.3:
+            r, g, b = day_yellow
+        elif dist < 0.7:
+            t = (dist - 0.3) / 0.4
+            r = int(day_yellow[0] + t * (sunset_pink[0] - day_yellow[0]))
+            g = int(day_yellow[1] + t * (sunset_pink[1] - day_yellow[1]))
+            b = int(day_yellow[2] + t * (sunset_pink[2] - day_yellow[2]))
+        else:
+            t = (dist - 0.7) / 0.3
+            r = int(sunset_pink[0] + t * (night_col[0] - sunset_pink[0]))
+            g = int(sunset_pink[1] + t * (night_col[1] - sunset_pink[1]))
+            b = int(sunset_pink[2] + t * (night_col[2] - sunset_pink[2]))
+        
+        for y in range(1):
+            canvas.SetPixel(x, y, r, g, b)
+        
+    return canvas
 
 # Misc. Variables
 TARGET_FPS = 100
@@ -328,6 +392,11 @@ async def draw():
             print(f"Current FPS: {current_fps:3.0f} | Average FPS: {avg_fps:5.1f}", end='\r', flush=True)
 
         # 3. Application Logic (Preserved)
+
+        canvas.Clear() # Clear the canvas before any of our drawing functions.
+
+        canvas = await draw_sun_gradient(matrix, canvas)
+
         canvas, scroll_state = await draw_layout(
             matrix, 
             canvas, 
@@ -336,6 +405,9 @@ async def draw():
             scroll_state=scroll_state, 
             dt=TARGET_FRAME_TIME
         )
+
+        matrix.SwapOnVSync(canvas)
+
         
         # 4. Frame Rate Limiting
         frame_end_time = time.perf_counter()
