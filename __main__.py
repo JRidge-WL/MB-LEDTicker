@@ -5,6 +5,7 @@ import statistics, warnings, math, asyncio
 import re
 import scripts.api
 from scripts.api import getTime, getNews # regex
+from collections import deque
 
 NewsParser = scripts.api.getNews.NewsParser()
 
@@ -266,8 +267,8 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
 
 # Misc. Variables
 TARGET_FPS = 100
-TARGET_FRAME_TIME = 1.0 / (TARGET_FPS*1.045)
-ACTUAL_FRAME_TIMES = [0]
+TARGET_FRAME_TIME = 1.0 / (TARGET_FPS*1.1)
+ACTUAL_FRAME_TIMES = deque(maxlen=10000)
 ACTUAL_FPS = 0
 
 async def draw():
@@ -279,7 +280,7 @@ async def draw():
     options = RGBMatrixOptions()
     options.rows = 32
     options.cols = 64
-    options.chain_length = 2
+    options.chain_length = 8
     options.parallel = 1
     options.hardware_mapping = 'adafruit-hat'
     options.gpio_slowdown = 2
@@ -300,27 +301,42 @@ async def draw():
 
     while True:
         frame_start_time = time.perf_counter()
-
-        dt = frame_start_time - frame_end_time
-
-        if len(ACTUAL_FRAME_TIMES) > TARGET_FPS/5:
-            ACTUAL_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES[-10:])
-            AVG_FPS = 1 / statistics.fmean(ACTUAL_FRAME_TIMES)
-            ACTUAL_FRAME_TIMES = ACTUAL_FRAME_TIMES[-10000:]
-            print(f"Current FPS: {ACTUAL_FPS:3.0f} | Average FPS: {AVG_FPS:5.1f}", end='\r', flush=True)
-
-        canvas, scroll_state = await draw_layout(matrix, canvas, objects,
-                                        fonts_cache=fonts_cache,
-                                        scroll_state=scroll_state, dt=dt)
-        frame_end_time = time.perf_counter()
         
-        sleep_time = TARGET_FRAME_TIME - (frame_end_time - frame_start_time)
+        # 1. Precise Delta Time
+        dt = frame_start_time - frame_end_time
+        
+        # 2. Safe Performance Metrics (Avoids StatisticsError on empty list)
+        if len(ACTUAL_FRAME_TIMES) > (TARGET_FPS / 5):
+            # fmean is faster than mean for floating point data
+            # current_fps uses the last 10 frames for responsiveness
+            current_fps = 1 / statistics.fmean(list(ACTUAL_FRAME_TIMES)[-10:])
+            avg_fps = 1 / statistics.fmean(ACTUAL_FRAME_TIMES)
+            print(f"Current FPS: {current_fps:3.0f} | Average FPS: {avg_fps:5.1f}", end='\r', flush=True)
 
+        # 3. Application Logic (Preserved)
+        canvas, scroll_state = await draw_layout(
+            matrix, 
+            canvas, 
+            objects, 
+            fonts_cache=fonts_cache, 
+            scroll_state=scroll_state, 
+            dt=TARGET_FRAME_TIME
+        )
+        
+        # 4. Frame Rate Limiting
+        frame_end_time = time.perf_counter()
+        render_duration = frame_end_time - frame_start_time
+        sleep_time = TARGET_FRAME_TIME - render_duration
+        
         if sleep_time > 0:
+            # Relinquishes control to the event loop
             await asyncio.sleep(sleep_time)
+        
+        # 5. Record final cycle time (including sleep) for accurate FPS tracking
         ACTUAL_FRAME_TIMES.append(time.perf_counter() - frame_start_time)
 
 async def update():
+
     while True:
         await NewsParser.refresh_news_feed()
         await asyncio.sleep(0.5)

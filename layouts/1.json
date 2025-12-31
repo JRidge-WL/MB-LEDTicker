@@ -37,7 +37,7 @@
       "y": "50%",
       "width": "100%",
       "height": "14px",
-      "text": "NEWS:[fg:#ffffff] {NewsParser:get_current_news_str}",
+      "text": "{NewsParser:get_current_news_str}",
       "font": "5x7.bdf",
       "fgColor": "#FFFF00",
       "horizontal": "left",

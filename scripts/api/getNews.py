@@ -1,6 +1,6 @@
 from zoneinfo import ZoneInfo
 from datetime import datetime, timedelta
-import aiohttp, feedparser, asyncio
+import aiohttp, feedparser, asyncio, random
 
 class Singleton(type):
     def __init__(cls, name, bases, dict):
@@ -72,42 +72,36 @@ class NewsParser(object):
 
         all_entries = []
         for result_tuple in results_with_urls:
-            if result_tuple is None:
-                continue
-
+            if result_tuple is None: continue
             result_text, url = result_tuple
 
             if result_text:
-                feed = feedparser.parse(result_text)
-                default_publisher = feed.feed.get('title', url) 
+                feed = await asyncio.to_thread(feedparser.parse, result_text)
+                await asyncio.sleep(0)
+                
+                # --- FIX: Get the Website Name from the Feed Metadata ---
+                # This is the "BBC News" or "The Register" part.
+                website_name = feed.feed.get('title', url) 
 
                 for entry in feed.entries:
-                    # --- START: Filtering Logic ---
-                    # Use the 'published_parsed' attribute which is a time tuple (struct_time)
                     pub_date_parsed = entry.get('published_parsed')
-                    
                     if pub_date_parsed:
-                        # Convert the time tuple to a timezone-aware datetime object in UTC
                         pub_date_datetime = datetime(*pub_date_parsed[:6], tzinfo=ZoneInfo("UTC"))
 
-                        # Only proceed if the article was published after the threshold
                         if pub_date_datetime >= six_hours_ago:
-                            # --- END: Filtering Logic ---
-
-                            publisher_name = entry.get('author') or (getattr(entry, 'source', None) and entry.source.get('title')) or default_publisher
-                            
                             all_entries.append({
                                 'title': entry.get('title', 'No Title'),
                                 'link': entry.get('link', 'No Link'),
                                 'published': entry.get('published', 'No Date'),
-                                'publisher': publisher_name 
+                                # Store the website name instead of the specific author
+                                'publisher': website_name 
                             })
         
         # Sort all news items by date (optional, but good practice for recent news)
         # We can sort using our new 'published_datetime' key if we store it, 
         # but sorting by the 'published' string works fine for reverse chronological order in most cases.
         # all_entries.sort(key=lambda item: item['published'], reverse=True) 
-
+        random.shuffle(all_entries)
         self._upcoming_news_items = all_entries
         self.update_pending = True
         print(f"News refresh complete. Total items found in last 6 hours: {len(self._upcoming_news_items)}")
@@ -128,11 +122,8 @@ class NewsParser(object):
         
         # Get the current item using the index
         item = self._news_items[self._current_item_index]
-
-        # Format the string
-        news_string = f"{item['title']}"
             
-        return news_string
+        return f"[fg:#FFFF00]{item['publisher'].upper()}:[fg:#ffffff] {item['title']}"
 
     def next_news(self):
         """
