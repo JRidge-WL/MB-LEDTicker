@@ -340,6 +340,21 @@ async def draw_sun_gradient(matrix, canvas):
         
         for y in range(1):
             canvas.SetPixel(x, y, r, g, b)
+                
+        radius = 2
+        sun_y = 0  # Based on your previous snippet
+        for y_offset in range(-radius, radius + 1):
+            # Calculate how wide the circle is at this specific y-row
+            # x = sqrt(r^2 - y^2)
+            import math
+            x_limit = int(math.sqrt(radius**2 - y_offset**2))
+            
+            for x_offset in range(-x_limit, x_limit + 1):
+                canvas.SetPixel(
+                    sun_x + x_offset, 
+                    sun_y + y_offset, 
+                    255, 255, 0  # Red, Green, Blue
+                )
         
     return canvas
 
@@ -358,7 +373,7 @@ async def draw():
     options = RGBMatrixOptions()
     options.rows = 32
     options.cols = 64
-    options.chain_length = 2
+    options.chain_length = 8
     options.parallel = 1
     options.hardware_mapping = 'adafruit-hat'
     options.gpio_slowdown = 4
