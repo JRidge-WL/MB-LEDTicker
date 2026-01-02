@@ -262,7 +262,7 @@ async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=No
         if debug:
             draw_debug_rect(canvas, x0, y0, w, h, idx)
 
-    return matrix.SwapOnVSync(canvas), scroll_state, fonts_cache
+    return canvas, scroll_state, fonts_cache
 
 async def draw_sun_gradient(matrix, canvas):
     now = datetime.now()
