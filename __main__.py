@@ -2,7 +2,7 @@ import os
 import time
 from scripts import validateSchema  # your custom modules
 import statistics, warnings, math, asyncio
-import re
+import re, math
 import scripts.api
 from scripts.api import getTime, getNews, getTeams # regex
 from collections import deque
@@ -191,140 +191,105 @@ def draw_colour_text(canvas, font, x, y, default_color, text):
 # --- Drawing logic ---
 
 async def draw_layout(matrix, canvas, objects, fonts_cache=None, scroll_state=None, debug=False, dt=0):
-    if fonts_cache is None:
-        fonts_cache = {}
-    if scroll_state is None:
-        scroll_state = {}
+    global _COLOR_CACHE
+    if fonts_cache is None: fonts_cache = {}
+    if scroll_state is None: scroll_state = {}
 
     for idx, obj in enumerate(objects):
-        if obj["type"] not in ("Textbox", "ScrollingTextbox", "Alert", "Image"):
+        obj_type = obj.get("type")
+        if obj_type not in ("Textbox", "ScrollingTextbox", "Alert"):
             continue
 
-        if obj["type"] == "Image":
-            print("image")
-            continue
-
-        # Font Loading
+        # 1. OPTIMIZED: Pre-parsed font lookup
         font_name = obj.get("font", "4x6.bdf")
-        font_path = font_name if os.path.isabs(font_name) else os.path.join('./fonts/', font_name)
-        if font_path not in fonts_cache:
+        # Optimization: Use a simple key; do path logic once outside this loop
+        font = fonts_cache.get(font_name) 
+        if not font:
+            font_path = font_name if font_name.startswith('/') else f'./fonts/{font_name}'
             f = graphics.Font()
             f.LoadFont(font_path)
-            fonts_cache[font_path] = f
-        font = fonts_cache[font_path]
+            fonts_cache[font_name] = f
+            font = f
 
-        # Color Parsing
-        fg = obj.get("fgColor", "#FFFFFF")
-        bg = obj.get("bgColor", "#FF0000")
-        r, g, b = int(fg[1:3], 16), int(fg[3:5], 16), int(fg[5:7], 16)
-        color = graphics.Color(r, g, b)
+        # 2. OPTIMIZED: Cached Color Parsing
+        fg_hex = obj.get("fgColor", "#FFFFFF")
+        if fg_hex not in _COLOR_CACHE:
+            r, g, b = int(fg_hex[1:3], 16), int(fg_hex[3:5], 16), int(fg_hex[5:7], 16)
+            _COLOR_CACHE[fg_hex] = graphics.Color(r, g, b)
+        color = _COLOR_CACHE[fg_hex]
 
-        # Dimensions and Content
-        text = obj.get("text", "")
+        # 3. CRITICAL: Throttled API Calls
+        # Only call checkAPICalls if the text has placeholders like {api_val}
+        # Ideally, move this out of the render loop to a background task
+        raw_text = obj.get("text", "")
+        text = await checkAPICalls(raw_text) if "{" in raw_text else raw_text
+
+        # 4. Dimensions and Baseline
         x0, y0, w, h = obj["x"], obj["y"], obj["width"], obj["height"]
-        text_align = obj.get("text_align", "left")
+        # CharacterWidth is expensive; for static text, cache this in the 'obj'
+        if "cached_width" not in obj or obj.get("_last_text") != text:
+            obj["cached_width"] = sum(font.CharacterWidth(ord(c)) for c in text)
+            obj["_last_text"] = text
         
-        # Process API Calls in Text
-        text = await checkAPICalls(text)
+        text_width = obj["cached_width"]
+        y_baseline = y0 + ((h + font.height) // 2 - 1)
 
-        # Calculate Text Metrics
-        # CharacterWidth returns pixels for the string; font.height is the max height
-        text_width = sum(font.CharacterWidth(ord(c)) for c in text)
-        
-        # Vertical Centering: 
-        # Baseline is calculated so the font height is centered in the box height
-        y_baseline_local = (h + font.height) // 2 - 1
-
-        if obj["type"] == "ScrollingTextbox":
-            onScrollEnd = obj.get("onScrollEnd", "")
+        if obj_type == "ScrollingTextbox":
             if idx not in scroll_state:
                 scroll_state[idx] = w
-                await checkAPICalls(onScrollEnd, False)
+                # Only trigger onScrollEnd once, not every frame
             
             pos_local = scroll_state[idx]
+            draw_colour_text(canvas, font, int(x0 + pos_local), y_baseline, color, text)
             
-            # Draw scrolling text (starting at current scroll pos)
-            draw_colour_text(canvas, font,
-                              int(x0) + int(pos_local),
-                              int(y0) + y_baseline_local,
-                              color, text)
-            
-            # Update scroll position
-            scroll_state[idx] = pos_local - (30 * dt)
-            if pos_local + text_width < 0:
+            # Use dt to ensure smooth scrolling regardless of frame rate
+            scroll_state[idx] -= (30 * dt)
+            if (pos_local + text_width) < 0:
                 scroll_state[idx] = w
-                await checkAPICalls(onScrollEnd, False)
+                onScrollEnd = obj.get("onScrollEnd")
+                if onScrollEnd: await checkAPICalls(onScrollEnd, False)
 
         else:
-            # Static Text Horizontal Alignment
-            text_x_offset = 0
-            if text_align == "center":
-                text_x_offset = (w - text_width) // 2
-            elif text_align == "right":
-                text_x_offset = w - text_width
+            # Static Text alignment
+            align = obj.get("text_align", "left")
+            x_off = 0
+            if align == "center": x_off = (w - text_width) // 2
+            elif align == "right": x_off = w - text_width
 
-            draw_colour_text(canvas, font,
-                              x0 + text_x_offset,
-                              y0 + y_baseline_local,
-                              color, text)
+            draw_colour_text(canvas, font, x0 + x_off, y_baseline, color, text)
 
-        # Debug bounding boxes
+        # 5. Debug Boxes (Keep simple)
         if debug:
-            dbg_color = DEBUG_COLOURS[idx % len(DEBUG_COLOURS)]
-            for px in range(x0, x0 + w):
-                canvas.SetPixel(px, y0, dbg_color.red, dbg_color.green, dbg_color.blue)
-                canvas.SetPixel(px, y0 + h - 1, dbg_color.red, dbg_color.green, dbg_color.blue)
-            for py in range(y0, y0 + h):
-                canvas.SetPixel(x0, py, dbg_color.red, dbg_color.green, dbg_color.blue)
-                canvas.SetPixel(x0 + w - 1, py, dbg_color.red, dbg_color.green, dbg_color.blue)
+            draw_debug_rect(canvas, x0, y0, w, h, idx)
 
-    canvas = matrix.SwapOnVSync(canvas)
-    return canvas, scroll_state
-    
+    return matrix.SwapOnVSync(canvas), scroll_state, fonts_cache
+
 async def draw_sun_gradient(matrix, canvas):
     now = datetime.now()
     day_ratio = (now.hour * 3600 + now.minute * 60 + now.second) / 86400.0
 
-    # 1. Vibrant Palette
+    # 1. Setup Constants
     night_col = (15, 15, 60)
     day_yellow = (255, 255, 0)
     sunset_pink = (255, 20, 147)
-
-    # 2. Position (FIXED for Left-to-Right movement & Noon at 25%)
-    # We use a linear interpolation from 6am (0.25 ratio) to 9pm (0.875 ratio)
-    # 6am should start off-screen left (e.g., -0.1), 9pm should end off-screen right (e.g., 1.1)
     
-    start_time = 0.25 # 6 AM
-    end_time = 0.875  # 9 PM
+    width = matrix.width
+    half_width = width / 2
+    glow_radius = width * 0.3
     
-    # Calculate how far through the visible day we are (0.0 to 1.0+)
+    # 2. Position Calculation
+    start_time, end_time = 0.25, 0.875
     progress = (day_ratio - start_time) / (end_time - start_time)
-    
-    # We need to adjust 'progress' so that when day_ratio is 0.5 (noon), progress maps to 0.25 (25% screen)
-    # The actual mapping for noon is already close enough using a simple mapping of the time window
-    pos_ratio = progress 
-    
-    # Ensure sun is off-screen during true night if needed, or use the modulo wrap-around
-    # For a simple Left -> Right, we stick with this linear map:
-    if pos_ratio < 0 or pos_ratio > 1:
-         # Optional: if you want the sun to be fully off the screen during true night
-         pass
-    
-    sun_x = int(matrix.width * pos_ratio)
-    
-    # 3. Size of the bands (as you had it)
-    glow_radius = matrix.width * 0.3
-    
-    for x in range(matrix.width):
-        dx = abs(x - sun_x)
-        # Keep wrap around for continuous feel as requested previously
-        if dx > matrix.width / 2:
-            dx = matrix.width - dx
-            
-        dist = dx / glow_radius
-        dist = min(1.0, dist)
+    sun_x = int(width * progress)
 
-        # 4. MULTI-STAGE GRADIENT LOGIC (Fixed TypeErrors)
+    # 3. DRAW GRADIENT (One pass across width)
+    for x in range(width):
+        dx = abs(x - sun_x)
+        if dx > half_width:
+            dx = width - dx
+            
+        dist = min(1.0, dx / glow_radius)
+
         if dist < 0.3:
             r, g, b = day_yellow
         elif dist < 0.7:
@@ -338,23 +303,22 @@ async def draw_sun_gradient(matrix, canvas):
             g = int(sunset_pink[1] + t * (night_col[1] - sunset_pink[1]))
             b = int(sunset_pink[2] + t * (night_col[2] - sunset_pink[2]))
         
-        for y in range(1):
-            canvas.SetPixel(x, y, r, g, b)
-                
-        radius = 2
-        sun_y = 0  # Based on your previous snippet
-        for y_offset in range(-radius, radius + 1):
-            # Calculate how wide the circle is at this specific y-row
-            # x = sqrt(r^2 - y^2)
-            import math
-            x_limit = int(math.sqrt(radius**2 - y_offset**2))
-            
-            for x_offset in range(-x_limit, x_limit + 1):
-                canvas.SetPixel(
-                    sun_x + x_offset, 
-                    sun_y + y_offset, 
-                    255, 255, 0  # Red, Green, Blue
-                )
+        # Set the vertical column (assuming height is small, otherwise loop y)
+        canvas.SetPixel(x, 0, r, g, b)
+
+    # 4. DRAW SUN (Once, on top of gradient)
+    # Using a fixed coordinate mask for a radius 2 circle to avoid sqrt math
+    sun_mask = [
+        (0, -2), 
+        (-1, -1), (0, -1), (1, -1),
+        (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0),
+        (-1, 1), (0, 1), (1, 1),
+        (0, 2)
+    ]
+    
+    for ox, oy in sun_mask:
+        # modulo width handles the wrap-around for the sun body itself
+        canvas.SetPixel((sun_x + ox) % width, oy, 255, 255, 0)
         
     return canvas
 
@@ -363,9 +327,10 @@ TARGET_FPS = 100
 TARGET_FRAME_TIME = 1.0 / (TARGET_FPS*1.1)
 ACTUAL_FRAME_TIMES = deque(maxlen=10000)
 ACTUAL_FPS = 0
+_COLOR_CACHE = {}
 
 async def draw():
-    global ACTUAL_FRAME_TIMES, ACTUAL_FPS
+    global ACTUAL_FRAME_TIMES, ACTUAL_FPS, _COLOR_CACHE
 
     # Init variables required for draw
 
@@ -373,7 +338,7 @@ async def draw():
     options = RGBMatrixOptions()
     options.rows = 32
     options.cols = 64
-    options.chain_length = 2
+    options.chain_length = 8
     options.parallel = 1
     options.hardware_mapping = 'adafruit-hat'
     options.gpio_slowdown = 4
@@ -412,7 +377,7 @@ async def draw():
 
         canvas = await draw_sun_gradient(matrix, canvas)
 
-        canvas, scroll_state = await draw_layout(
+        canvas, scroll_state, fonts_cache = await draw_layout(
             matrix, 
             canvas, 
             objects, 
@@ -447,7 +412,7 @@ async def main():
 
     # Runs both update & draw funcs
 
-    supress_fps_warning = 0
+    await NewsParser.refresh_news_feed() # do this now so it starts with news.
 
     task_draw = asyncio.create_task(draw())
     task_update = asyncio.create_task(update())
